@@ -25,7 +25,8 @@ export async function generateTripPlan(userQuery: string): Promise<TripPlan> {
     const response = await client.messages.create({
       model: "claude-opus-4-7",
       max_tokens: 16000,
-      thinking: { type: "enabled", budget_tokens: 8000 },
+      thinking: { type: "adaptive" },
+      output_config: { effort: "high" },
       system: [
         {
           type: "text",
