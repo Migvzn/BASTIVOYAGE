@@ -4,10 +4,21 @@ import path from "path";
 import { extractJSON, normalizeTripPlan } from "./parser";
 import type { TripPlan } from "./types";
 
-const SYSTEM_PROMPT = fs.readFileSync(
-  path.join(process.cwd(), "prompts", "travel.md"),
-  "utf-8",
-);
+function loadSystemPrompt(): string {
+  const candidates = [
+    path.join(process.cwd(), "prompts", "travel.md"),
+    path.join(__dirname, "..", "prompts", "travel.md"),
+    path.join(__dirname, "..", "..", "prompts", "travel.md"),
+  ];
+  for (const p of candidates) {
+    try {
+      return fs.readFileSync(p, "utf-8");
+    } catch {
+      // try next
+    }
+  }
+  return "You are a travel planning assistant. Always reply with a valid JSON TripPlan.";
+}
 
 function getClient(): Anthropic | null {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -30,12 +41,12 @@ export async function generateTripPlan(userQuery: string): Promise<TripPlan> {
       system: [
         {
           type: "text",
-          text: SYSTEM_PROMPT,
+          text: loadSystemPrompt(),
           cache_control: { type: "ephemeral" },
         },
       ],
       messages: [{ role: "user", content: userQuery }],
-    });
+    } as any);
 
     const textBlock = response.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
