@@ -2,16 +2,29 @@
 
 import { useState } from "react";
 import type { Hotel } from "@/lib/types";
+import { hotelComparison } from "@/lib/links";
 import Reviews from "./Reviews";
+import CompareDropdown from "./CompareDropdown";
 
 interface Props {
   hotels: Hotel[];
   airbnbSearchLink?: string;
   currency?: string;
   source?: string;
+  defaultCheckIn?: string;
+  defaultCheckOut?: string;
+  defaultAdults?: number;
 }
 
-export default function HotelList({ hotels, airbnbSearchLink, currency = "EUR", source }: Props) {
+export default function HotelList({
+  hotels,
+  airbnbSearchLink,
+  currency = "EUR",
+  source,
+  defaultCheckIn,
+  defaultCheckOut,
+  defaultAdults,
+}: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
   const fmt = (n: number) =>
     new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }).format(n);
@@ -35,7 +48,7 @@ export default function HotelList({ hotels, airbnbSearchLink, currency = "EUR", 
             rel="noopener noreferrer sponsored"
             className="text-xs px-3 py-1.5 rounded-full bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/30 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-semibold transition"
           >
-            Voir sur Airbnb ↗
+            🏡 Voir sur Airbnb ↗
           </a>
         )}
       </div>
@@ -44,6 +57,17 @@ export default function HotelList({ hotels, airbnbSearchLink, currency = "EUR", 
         {hotels.map((h, i) => {
           const total = h.price_per_night * h.nights;
           const isOpen = expanded === i;
+          const compareLinks = hotelComparison({
+            hotelName: h.name,
+            city: h.city,
+            checkIn: defaultCheckIn,
+            checkOut: defaultCheckOut,
+            adults: defaultAdults,
+            minStars: h.rating,
+            priceMin: h.price_per_night ? Math.max(0, h.price_per_night - 25) : undefined,
+            priceMax: h.price_per_night ? h.price_per_night + 60 : undefined,
+            currency,
+          });
           return (
             <li
               key={i}
@@ -93,24 +117,30 @@ export default function HotelList({ hotels, airbnbSearchLink, currency = "EUR", 
                     <div className="text-[10px] text-stone-500">{h.reviews_count} avis</div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1.5 items-end">
                   <a
                     href={h.affiliate_url ?? h.booking_link ?? h.fallback_link ?? "#"}
                     target="_blank"
                     rel="noopener noreferrer sponsored"
-                    className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition text-center"
+                    className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition text-center whitespace-nowrap"
                   >
-                    Réserver
+                    Booking →
                   </a>
-                  {h.reviews && h.reviews.length > 0 && (
-                    <button
-                      onClick={() => setExpanded(isOpen ? null : i)}
-                      className="text-[11px] text-stone-500 hover:text-brand-600 transition"
-                    >
-                      {isOpen ? "Masquer avis" : "Voir avis"}
-                    </button>
-                  )}
+                  <CompareDropdown links={compareLinks} label="Autres sites" compact />
                 </div>
+              </div>
+
+              <div className="flex justify-between items-center mt-2">
+                {h.reviews && h.reviews.length > 0 ? (
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : i)}
+                    className="text-[11px] text-stone-500 hover:text-brand-600 transition"
+                  >
+                    {isOpen ? "Masquer avis" : `Voir ${h.reviews.length} avis`}
+                  </button>
+                ) : (
+                  <span />
+                )}
               </div>
 
               {isOpen && h.reviews && h.reviews.length > 0 && (

@@ -100,11 +100,24 @@ function parseAmadeusOffer(o: any, q: FlightQuery): Flight | null {
     const carriers = new Set<string>(segs.map((s: any) => s.carrierCode));
     const airline = Array.from(carriers).join(", ");
     const price = Number(o.price?.grandTotal ?? o.price?.total ?? 0);
+    const cabinKey = (o.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin ?? "ECONOMY")
+      .toString()
+      .toLowerCase();
+    const cabin = cabinKey.includes("business")
+      ? ("business" as const)
+      : cabinKey.includes("premium")
+        ? ("premiumeconomy" as const)
+        : cabinKey.includes("first")
+          ? ("first" as const)
+          : ("economy" as const);
     const link = skyscannerFlightLink({
       origin: q.origin,
       destination: q.destination,
       departDate: q.departDate,
       returnDate: q.returnDate,
+      adults: q.adults,
+      cabin,
+      maxStops: Math.max(segs.length - 1, 0),
     });
     return {
       airline,
@@ -140,17 +153,21 @@ function defaultDepart(): string {
 
 function mockFlights(q: FlightQuery): Flight[] {
   const base = q.budgetHint ? Math.max(80, Math.round(q.budgetHint * 0.35)) : 280;
-  const link = () =>
+  const link = (overrides: Partial<Parameters<typeof skyscannerFlightLink>[0]> = {}) =>
     skyscannerFlightLink({
       origin: q.origin,
       destination: q.destination,
       departDate: q.departDate,
       returnDate: q.returnDate,
+      adults: q.adults,
+      ...overrides,
     });
   const gflink = googleFlightsLink({
     origin: q.origin,
     destination: q.destination,
     departDate: q.departDate,
+    returnDate: q.returnDate,
+    adults: q.adults,
   });
   return [
     {
@@ -162,7 +179,7 @@ function mockFlights(q: FlightQuery): Flight[] {
       stops: 0,
       price: Math.round(base * 0.85),
       cabin: "Economy",
-      ...link(),
+      ...link({ cabin: "economy", maxStops: 0 }),
     },
     {
       airline: "Air France",
@@ -173,7 +190,7 @@ function mockFlights(q: FlightQuery): Flight[] {
       stops: 0,
       price: base + 40,
       cabin: "Economy",
-      ...link(),
+      ...link({ cabin: "economy", maxStops: 0 }),
     },
     {
       airline: "Lufthansa",
@@ -195,7 +212,7 @@ function mockFlights(q: FlightQuery): Flight[] {
       stops: 0,
       price: base + 90,
       cabin: "Premium Economy",
-      ...link(),
+      ...link({ cabin: "premiumeconomy", maxStops: 0 }),
     },
   ];
 }

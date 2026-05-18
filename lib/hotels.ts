@@ -59,19 +59,24 @@ function parseBookingHotel(r: any, q: HotelQuery): Hotel | null {
       r.min_total_price ?? r.price_breakdown?.gross_price ?? r.composite_price_breakdown?.gross_amount?.value ?? 0,
     );
     const nights = q.nights ?? 3;
+    const perNight = nights > 0 ? Math.round(price / nights) : Math.round(price);
+    const stars = r.review_score ? Math.round(Number(r.review_score) / 2) : undefined;
     const link = bookingHotelLink({
       hotelName: name,
       city: q.city,
       checkIn: q.checkIn,
       checkOut: q.checkOut,
       adults: q.adults,
+      minStars: stars,
+      priceMin: Math.max(0, perNight - 25),
+      priceMax: perNight + 60,
     });
     return {
       name,
       city: q.city,
       nights,
-      price_per_night: nights > 0 ? Math.round(price / nights) : Math.round(price),
-      rating: r.review_score ? Math.round(Number(r.review_score) / 2) : undefined,
+      price_per_night: perNight,
+      rating: stars,
       reviews_count: r.review_nr ?? undefined,
       tags: r.accommodation_type_name ? [String(r.accommodation_type_name)] : [],
       image_url: r.max_photo_url ?? r.main_photo_url,
@@ -125,6 +130,9 @@ function mockHotels(q: HotelQuery): Hotel[] {
         checkIn: q.checkIn,
         checkOut: q.checkOut,
         adults,
+        minStars: ratings[t!],
+        priceMin: Math.max(0, price - 25),
+        priceMax: price + 60,
       });
       out.push({
         name,
