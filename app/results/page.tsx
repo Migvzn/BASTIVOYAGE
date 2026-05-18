@@ -271,6 +271,11 @@ export default function ResultsPage() {
                   flights={filteredFlights}
                   currency={currency}
                   source={data.sources?.flights ?? plan.enrichment?.flights}
+                  defaultOrigin={plan.origin}
+                  defaultDestination={plan.destination}
+                  defaultDepartDate={plan.start_date}
+                  defaultReturnDate={plan.end_date}
+                  defaultAdults={plan.travelers}
                 />
               </section>
             )}
@@ -288,6 +293,9 @@ export default function ResultsPage() {
                   airbnbSearchLink={data.airbnb_search_link}
                   currency={currency}
                   source={data.sources?.hotels ?? plan.enrichment?.hotels}
+                  defaultCheckIn={plan.start_date}
+                  defaultCheckOut={plan.end_date}
+                  defaultAdults={plan.travelers}
                 />
               </section>
             )}

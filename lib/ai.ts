@@ -110,7 +110,7 @@ async function enrichPlan(plan: TripPlan): Promise<TripPlan> {
   ]);
 
   const aiFlights = (plan.flights ?? []).map((f) =>
-    attachFlightLink(f, origin, destination, departDate, returnDate),
+    attachFlightLink(f, origin, destination, departDate, returnDate, adults),
   );
   const mergedFlights = mergeFlights(aiFlights, flightRes.flights).slice(0, 8);
 
@@ -149,7 +149,14 @@ async function enrichPlan(plan: TripPlan): Promise<TripPlan> {
     transport: opt.transport.map((t) => attachTransportLink(t, departDate)),
     hotels: opt.hotels.map((h) => attachHotelLink(h, departDate, returnDate, adults)),
     activities: opt.activities.map(attachActivityLink),
-    flights: opt.flights ?? mergedFlights.slice(0, 3),
+    flights:
+      (opt.flights ?? []).map((f) =>
+        attachFlightLink(f, origin, destination, departDate, returnDate, adults),
+      ).length > 0
+        ? (opt.flights ?? []).map((f) =>
+            attachFlightLink(f, origin, destination, departDate, returnDate, adults),
+          )
+        : mergedFlights.slice(0, 3),
     total_price: opt.total_price ?? opt.price,
   }));
 
@@ -179,12 +186,21 @@ function offsetDate(base: Date, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function flightCabin(c?: string): "economy" | "premiumeconomy" | "business" | "first" {
+  const s = (c ?? "").toLowerCase();
+  if (s.includes("business")) return "business";
+  if (s.includes("premium")) return "premiumeconomy";
+  if (s.includes("first")) return "first";
+  return "economy";
+}
+
 function attachFlightLink(
   f: Flight,
   origin: string,
   destination: string,
   depart?: string,
   ret?: string,
+  adults?: number,
 ): Flight {
   if (f.booking_link) return f;
   const link = skyscannerFlightLink({
@@ -192,6 +208,9 @@ function attachFlightLink(
     destination: f.to || destination,
     departDate: depart,
     returnDate: ret,
+    adults,
+    cabin: flightCabin(f.cabin),
+    maxStops: f.stops,
   });
   return { ...f, ...link };
 }
@@ -204,6 +223,9 @@ function attachHotelLink(h: Hotel, checkIn?: string, checkOut?: string, adults?:
     checkIn,
     checkOut,
     adults,
+    minStars: h.rating,
+    priceMin: h.price_per_night ? Math.max(0, h.price_per_night - 25) : undefined,
+    priceMax: h.price_per_night ? h.price_per_night + 60 : undefined,
   });
   return { ...h, ...link };
 }

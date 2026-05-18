@@ -9,6 +9,8 @@ import FlightList from "./FlightList";
 import HotelList from "./HotelList";
 import PriceComparison from "./PriceComparison";
 import MapView from "./MapView";
+import CompareDropdown from "./CompareDropdown";
+import { transportComparison } from "@/lib/links";
 
 interface Props {
   plan: TripPlan;
@@ -107,7 +109,16 @@ export default function TripView({
               Voir tout →
             </Link>
           </div>
-          <FlightList flights={flightsForMode} currency={currency} source={flightsSource} />
+          <FlightList
+            flights={flightsForMode}
+            currency={currency}
+            source={flightsSource}
+            defaultOrigin={plan.origin}
+            defaultDestination={plan.destination}
+            defaultDepartDate={plan.start_date}
+            defaultReturnDate={plan.end_date}
+            defaultAdults={plan.travelers}
+          />
         </section>
       )}
 
@@ -128,6 +139,9 @@ export default function TripView({
             airbnbSearchLink={airbnbSearchLink}
             currency={currency}
             source={hotelsSource}
+            defaultCheckIn={plan.start_date}
+            defaultCheckOut={plan.end_date}
+            defaultAdults={plan.travelers}
           />
         </section>
       )}
@@ -137,35 +151,39 @@ export default function TripView({
         <section className="glass rounded-2xl p-5 sm:p-6">
           <h3 className="text-lg font-semibold mb-4">🚆 Comparateur transport</h3>
           <ul className="space-y-2">
-            {topTransport.map((t, i) => (
-              <li
-                key={i}
-                className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-white/50 dark:bg-stone-800/40"
-              >
-                <div className="text-xl flex-shrink-0">{transportEmoji(t.mode)}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium capitalize">
-                    {t.mode} · {t.from} → {t.to}
+            {topTransport.map((t, i) => {
+              const compareLinks = transportComparison(t.from, t.to, plan.start_date);
+              return (
+                <li
+                  key={i}
+                  className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-white/50 dark:bg-stone-800/40"
+                >
+                  <div className="text-xl flex-shrink-0">{transportEmoji(t.mode)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium capitalize">
+                      {t.mode} · {t.from} → {t.to}
+                    </div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400 truncate">
+                      {t.duration}
+                      {t.carrier ? ` · ${t.carrier}` : ""}
+                      {t.notes ? ` · ${t.notes}` : ""}
+                    </div>
                   </div>
-                  <div className="text-xs text-stone-500 dark:text-stone-400 truncate">
-                    {t.duration}
-                    {t.carrier ? ` · ${t.carrier}` : ""}
-                    {t.notes ? ` · ${t.notes}` : ""}
-                  </div>
-                </div>
-                <div className="font-semibold">{t.price > 0 ? fmt(t.price) : "Variable"}</div>
-                {(t.booking_link || t.fallback_link) && (
-                  <a
-                    href={t.affiliate_url ?? t.booking_link ?? t.fallback_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-lg bg-stone-800 dark:bg-stone-100 dark:text-stone-900 text-white text-xs font-semibold transition hover:opacity-80 whitespace-nowrap"
-                  >
-                    Réserver →
-                  </a>
-                )}
-              </li>
-            ))}
+                  <div className="font-semibold">{t.price > 0 ? fmt(t.price) : "Variable"}</div>
+                  {(t.booking_link || t.fallback_link) && (
+                    <a
+                      href={t.affiliate_url ?? t.booking_link ?? t.fallback_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-stone-800 dark:bg-stone-100 dark:text-stone-900 text-white text-xs font-semibold transition hover:opacity-80 whitespace-nowrap"
+                    >
+                      Réserver →
+                    </a>
+                  )}
+                  <CompareDropdown links={compareLinks} label="Comparer" />
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

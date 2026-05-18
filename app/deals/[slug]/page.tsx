@@ -133,7 +133,15 @@ export default async function DealPage({ params }: { params: { slug: string } })
           <div className="lg:col-span-2 space-y-6">
             <section className="glass rounded-2xl p-6">
               <h2 className="text-xl font-semibold mb-4">✈️ Vols recommandés</h2>
-              <FlightList flights={flights.flights} source={flights.source} />
+              <FlightList
+                flights={flights.flights}
+                source={flights.source}
+                defaultOrigin={route.origin}
+                defaultDestination={route.destination}
+                defaultDepartDate={depart}
+                defaultReturnDate={ret}
+                defaultAdults={2}
+              />
             </section>
 
             <section className="glass rounded-2xl p-6">
@@ -142,6 +150,9 @@ export default async function DealPage({ params }: { params: { slug: string } })
                 hotels={hotels.hotels}
                 airbnbSearchLink={hotels.airbnb_search_link}
                 source={hotels.source}
+                defaultCheckIn={depart}
+                defaultCheckOut={ret}
+                defaultAdults={2}
               />
             </section>
 
