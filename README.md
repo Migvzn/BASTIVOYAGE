@@ -1,84 +1,169 @@
-# BastiVoyage ✈️
+# 🌍 BastiVoyage
 
-AI-powered travel planner built with Next.js. Type your budget and destination — Claude generates 3 optimized scenarios (cheap / balanced / luxury), a day-by-day itinerary, transport comparisons, hotels, activities, and a full budget breakdown.
+> Une super-app voyage propulsée par IA. L'utilisateur décrit son voyage en langage naturel — l'IA orchestre vols, hôtels, transports, avis et itinéraire, puis renvoie chaque résultat avec un lien de réservation direct.
 
-## Stack
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Migvzn/BASTIVOYAGE)
 
-- **Next.js 14** (App Router) + TypeScript
-- **TailwindCSS** with dark mode, responsive design, smooth animations
-- **Claude API** (`claude-opus-4-7`) with adaptive thinking + prompt caching
-- **Vercel-ready** — zero config deployment
+---
 
-## Features
+## ✨ Ce que fait l'app
 
-- Natural-language trip planning ("J'ai 1000€, je veux aller au Japon 10 jours")
-- 3 budget modes side-by-side: économique, équilibré, luxe
-- Multi-modal transport comparison (vols, trains, bus)
-- Day-by-day itinerary timeline
-- Budget breakdown with visual bar chart
-- LocalStorage persistence of your last plan
-- Dark mode toggle
-- Graceful fallback when no API key is configured
+| | |
+|---|---|
+| **✈️ Vols** | Amadeus (live) avec fallback IA · liens Skyscanner / Google Flights · tracking affiliate ready |
+| **🏠 Hébergements** | Booking.com via RapidAPI · fallback IA · lien Airbnb de recherche · avis Google Places intégrés |
+| **🚆 Transport** | Comparateur multi-modal train / bus / vol / ferry · liens SNCF Connect, Omio, Rome2Rio |
+| **⭐ Avis** | Google Places API (notes + 5 derniers avis) · fallback réaliste · lien TripAdvisor |
+| **💰 Comparateur** | 3 budgets calculés (économique / équilibré / premium) avec total + breakdown |
+| **📍 Carte** | OpenStreetMap embed · lien Google Maps |
+| **🗓 Itinéraire** | Jour par jour cohérent (géographie, horaires) |
+| **🔗 Booking** | Chaque résultat = `booking_link` + `affiliate_url` (si configuré) + `fallback_link` Google |
 
-## Quick Start
+**Philosophie** : l'app fonctionne **sans aucune clé API** grâce à des données mock réalistes générées par Claude. Chaque clé ajoutée enrichit progressivement les résultats avec du temps réel.
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-npm install
+git clone https://github.com/Migvzn/BASTIVOYAGE.git
+cd BASTIVOYAGE
 cp .env.example .env.local
-# edit .env.local and add your ANTHROPIC_API_KEY
+# (optionnel) ajoutez vos clés dans .env.local
+npm install
 npm run dev
+# → http://localhost:3000
 ```
 
-Open http://localhost:3000.
+---
 
-## Deploy on Vercel
+## 🔐 Variables d'environnement
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/migvzn/bastivoyage&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%20from%20console.anthropic.com)
+Toutes optionnelles — l'app fait du graceful fallback. Voir `.env.example` pour la liste complète.
 
-1. Click the button (or import the repo manually on [vercel.com/new](https://vercel.com/new))
-2. Add `ANTHROPIC_API_KEY` as an environment variable
-3. Deploy
+| Variable | Effet quand absente | Comment l'obtenir |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Plans démo génériques au lieu de plans IA personnalisés | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| `AMADEUS_CLIENT_ID` + `AMADEUS_CLIENT_SECRET` | Vols mock (réalistes mais non live) | [developers.amadeus.com](https://developers.amadeus.com/) — free tier dispo |
+| `RAPIDAPI_KEY` | Hôtels mock | [rapidapi.com/apidojo/api/booking](https://rapidapi.com/apidojo/api/booking/) |
+| `GOOGLE_PLACES_API_KEY` | Avis et coordonnées mock | [Google Cloud Console → Places API](https://developers.google.com/maps/documentation/places/web-service) |
+| `SKYSCANNER_AFFILIATE_ID` | `affiliate_url` absent (booking_link reste fonctionnel) | Partner program Skyscanner |
+| `BOOKING_AFFILIATE_ID` | Idem pour Booking.com | [Booking Partner Hub](https://partner.booking.com/) |
 
-## Project Structure
+---
+
+## 🏛 Architecture
 
 ```
-app/
-  page.tsx              # Home — chat-style trip planner
-  trip/page.tsx         # Saved trip view
-  api/ai/route.ts       # Claude API endpoint
+/app
+  page.tsx                  # Home : chat IA + résultats inline
+  results/page.tsx          # Page résultats complète (filtres + carte)
+  trip/page.tsx             # Itinéraire jour par jour
   layout.tsx
   globals.css
-components/
-  Chat.tsx              # Input + suggestions + loading skeletons
-  TripView.tsx          # Full trip display with mode selector
-  Budget.tsx            # Visual budget breakdown
-  Itinerary.tsx         # Day-by-day timeline
-lib/
-  ai.ts                 # Claude client + fallback generator
-  parser.ts             # Robust JSON extraction
-  types.ts              # TripPlan types
-prompts/
-  travel.md             # System prompt (cached)
+  api/
+    ai/route.ts             # Orchestrateur principal (POST /api/ai)
+    flights/route.ts        # Recherche vols (POST /api/flights)
+    hotels/route.ts         # Recherche hôtels (POST /api/hotels)
+    reviews/route.ts        # Avis Google Places (POST /api/reviews)
+    transport/route.ts      # Multi-modal (POST /api/transport)
+
+/components
+  Chat.tsx                  # Input prompt + appel API
+  TripView.tsx              # Vue résultats principale
+  FlightList.tsx            # Liste vols avec boutons "Réserver"
+  HotelList.tsx             # Cartes hôtels avec tags + avis
+  Reviews.tsx               # Affichage des avis
+  MapView.tsx               # Carte OSM embed
+  PriceComparison.tsx       # Comparateur 3 budgets
+  Budget.tsx                # Répartition budgétaire
+  Itinerary.tsx             # Itinéraire jour par jour
+
+/lib
+  ai.ts                     # Orchestrateur Claude + fusion sources
+  flights.ts                # Wrapper Amadeus + mock
+  hotels.ts                 # Wrapper Booking RapidAPI + mock
+  reviews.ts                # Wrapper Google Places + mock
+  transport.ts              # Multi-modal mock + liens partenaires
+  links.ts                  # Générateur de booking_links + affiliate
+  parser.ts                 # Normalisation JSON IA
+  types.ts                  # Types TypeScript
+
+/prompts
+  travel.md                 # System prompt expert IA
 ```
 
-## API Contract
+### Flux d'une requête
 
-`POST /api/ai`
-
-```json
-{ "prompt": "J'ai 1000€, je veux aller au Japon 10 jours depuis Paris" }
+```
+User prompt → POST /api/ai
+   │
+   ├─ Claude (claude-opus-4-7) génère TripPlan structuré
+   │     (vols, hôtels, activités, itinéraire, budgets)
+   │
+   ├─ Enrichissement parallèle :
+   │     • searchFlights() → Amadeus live ou mock
+   │     • searchHotels() → Booking live ou mock
+   │     • searchTransport() → liens multi-modal
+   │     • getReviews() pour chaque hôtel top → Google Places
+   │
+   ├─ Merge + déduplication
+   │
+   └─ Réponse JSON { plan, airbnb_search_link, sources }
+        │
+        ├─ Home : affichage inline (TripView)
+        └─ /results : page complète avec filtres + carte
 ```
 
-Returns a `TripPlan` JSON object — see `lib/types.ts` for the schema.
+---
 
-## Environment Variables
+## ☁️ Deploy sur Vercel
 
-| Name                 | Required | Description                                                     |
-| -------------------- | -------- | --------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY`  | No*      | Anthropic API key. Without it, app runs in deterministic demo mode. |
+1. **Import** le repo dans Vercel
+2. **Production Branch** = `main`
+3. **Environment Variables** : ajoutez au minimum `ANTHROPIC_API_KEY`
+4. Cliquez Deploy
 
-\* Recommended for production — the fallback generator is template-based.
+Le framework est auto-détecté (Next.js 14, App Router, runtime nodejs).
 
-## License
+`prompts/travel.md` est inclus dans le bundle serverless via `experimental.outputFileTracingIncludes` dans `next.config.js`.
 
-MIT
+---
+
+## 💰 Monétisation
+
+L'app est conçue pour être monétisée via affiliation :
+
+- **Skyscanner** : `SKYSCANNER_AFFILIATE_ID` → ajoute `?associateid=...` aux liens vols
+- **Booking** : `BOOKING_AFFILIATE_ID` → ajoute `?aid=...` aux liens hôtels
+- **Airbnb** : programme partenaire requis (l'app utilise déjà des liens `airbnb.fr/s/...`)
+- **GetYourGuide** : les activités pointent vers `getyourguide.fr/s/?q=...` (programme affiliate dispo)
+
+Pour des conversions optimales :
+- Tracking : ajoutez un script Plausible / PostHog dans `app/layout.tsx`
+- SEO : les pages `/results` peuvent être rendues statiquement pour des deals populaires
+
+---
+
+## 🧠 Tech stack
+
+- **Next.js 14** (App Router, Server Components, Edge-ready)
+- **TypeScript** (strict)
+- **TailwindCSS** (design system custom)
+- **Anthropic SDK** (`claude-opus-4-7` avec thinking adaptatif)
+- **Vercel** (deploy + analytics)
+
+---
+
+## 📝 Roadmap
+
+- [ ] Webhook Stripe pour upsell "voyage premium"
+- [ ] Cron job Vercel pour deals de dernière minute → pages SEO auto-générées
+- [ ] Mode multi-destination (city-hopping intelligent)
+- [ ] Export PDF de l'itinéraire
+- [ ] Auth Supabase + sauvegarde cloud des voyages
+- [ ] Mode hors-ligne (PWA)
+
+---
+
+Made with Claude · Hébergé sur Vercel

@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Chat from "@/components/Chat";
 import TripView from "@/components/TripView";
 import type { TripPlan } from "@/lib/types";
 
 const STORAGE_KEY = "bastivoyage:lastPlan";
 
+interface Extras {
+  airbnb_search_link?: string;
+  sources?: Record<string, string>;
+}
+
 export default function Home() {
   const [plan, setPlan] = useState<TripPlan | null>(null);
+  const [extras, setExtras] = useState<Extras>({});
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -16,20 +23,33 @@ export default function Home() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { plan: TripPlan };
-        if (parsed?.plan) setPlan(parsed.plan);
+        const parsed = JSON.parse(raw);
+        if (parsed?.plan) {
+          setPlan(parsed.plan as TripPlan);
+          setExtras({
+            airbnb_search_link: parsed.airbnb_search_link,
+            sources: parsed.sources,
+          });
+        }
       }
     } catch {
       // ignore
     }
   }, []);
 
-  function handlePlan(p: TripPlan, prompt: string) {
+  function handlePlan(p: TripPlan, prompt: string, ex?: Extras) {
     setPlan(p);
+    setExtras(ex ?? {});
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ plan: p, prompt, savedAt: Date.now() }),
+        JSON.stringify({
+          plan: p,
+          prompt,
+          airbnb_search_link: ex?.airbnb_search_link,
+          sources: ex?.sources,
+          savedAt: Date.now(),
+        }),
       );
     } catch {
       // ignore
@@ -114,7 +134,20 @@ export default function Home() {
           id="trip-result"
           className="max-w-6xl mx-auto px-4 sm:px-6 pb-20"
         >
-          <TripView plan={plan} />
+          <div className="flex justify-end mb-4">
+            <Link
+              href="/results"
+              className="text-sm px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition"
+            >
+              Voir tous les vols & hôtels →
+            </Link>
+          </div>
+          <TripView
+            plan={plan}
+            airbnbSearchLink={extras.airbnb_search_link}
+            flightsSource={extras.sources?.flights}
+            hotelsSource={extras.sources?.hotels}
+          />
         </section>
       )}
 

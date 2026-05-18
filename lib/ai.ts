@@ -2,7 +2,24 @@ import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
 import { extractJSON, normalizeTripPlan } from "./parser";
-import type { TripPlan } from "./types";
+import { searchFlights } from "./flights";
+import { searchHotels } from "./hotels";
+import { searchTransport } from "./transport";
+import { getReviews } from "./reviews";
+import {
+  airbnbLink,
+  bookingHotelLink,
+  skyscannerFlightLink,
+  activityLink,
+  transportLink,
+} from "./links";
+import type {
+  Activity,
+  Flight,
+  Hotel,
+  TransportLeg,
+  TripPlan,
+} from "./types";
 
 function loadSystemPrompt(): string {
   const candidates = [
@@ -26,12 +43,9 @@ function getClient(): Anthropic | null {
   return new Anthropic({ apiKey: key });
 }
 
-export async function generateTripPlan(userQuery: string): Promise<TripPlan> {
+async function callClaude(userQuery: string): Promise<TripPlan | null> {
   const client = getClient();
-  if (!client) {
-    return fallbackPlan(userQuery);
-  }
-
+  if (!client) return null;
   try {
     const response = await client.messages.create({
       model: "claude-opus-4-7",
@@ -48,31 +62,220 @@ export async function generateTripPlan(userQuery: string): Promise<TripPlan> {
       messages: [{ role: "user", content: userQuery }],
     } as any);
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      throw new Error("No text block in response");
-    }
-
+    const textBlock = (response.content as any[]).find(
+      (b: any) => b.type === "text",
+    );
+    if (!textBlock || textBlock.type !== "text") return null;
     const parsed = extractJSON(textBlock.text);
     return normalizeTripPlan(parsed);
   } catch (err) {
-    console.error("AI generation failed:", err);
-    return fallbackPlan(userQuery);
+    console.error("Claude call failed:", err);
+    return null;
   }
+}
+
+export async function generateTripPlan(userQuery: string): Promise<TripPlan> {
+  const base = (await callClaude(userQuery)) ?? fallbackPlan(userQuery);
+  return enrichPlan(base);
+}
+
+async function enrichPlan(plan: TripPlan): Promise<TripPlan> {
+  const origin = plan.origin ?? "Paris";
+  const destination = plan.destination;
+  const duration = plan.duration_days ?? 5;
+  const adults = plan.travelers ?? 2;
+  const today = new Date();
+  const departDate = plan.start_date ?? offsetDate(today, 30);
+  const returnDate = plan.end_date ?? offsetDate(today, 30 + duration);
+
+  const [flightRes, hotelRes, transportRes] = await Promise.all([
+    searchFlights({
+      origin,
+      destination,
+      departDate,
+      returnDate,
+      adults,
+      budgetHint: plan.budget_total,
+    }),
+    searchHotels({
+      city: destination,
+      checkIn: departDate,
+      checkOut: returnDate,
+      adults,
+      nights: Math.max(1, duration - 1),
+      budgetHint: plan.budget_total,
+      tier: "balanced",
+    }),
+    searchTransport({ from: origin, to: destination, date: departDate }),
+  ]);
+
+  const aiFlights = (plan.flights ?? []).map((f) =>
+    attachFlightLink(f, origin, destination, departDate, returnDate),
+  );
+  const mergedFlights = mergeFlights(aiFlights, flightRes.flights).slice(0, 8);
+
+  const aiHotels = (plan.hotels ?? []).map((h) =>
+    attachHotelLink(h, departDate, returnDate, adults),
+  );
+  const mergedHotels = mergeHotels(aiHotels, hotelRes.hotels).slice(0, 9);
+  const enrichedHotels = await Promise.all(
+    mergedHotels.slice(0, 6).map(async (h) => {
+      try {
+        const info = await getReviews({ name: h.name, city: h.city });
+        return {
+          ...h,
+          rating: h.rating ?? info.rating,
+          reviews_count: h.reviews_count ?? info.reviews_count,
+          reviews: info.reviews,
+          lat: h.lat ?? info.lat,
+          lng: h.lng ?? info.lng,
+        };
+      } catch {
+        return h;
+      }
+    }),
+  );
+  const finalHotels = [...enrichedHotels, ...mergedHotels.slice(6)];
+
+  const activities = (plan.activities ?? []).map((a) => attachActivityLink(a));
+
+  const transport: TransportLeg[] = mergeTransport(
+    (plan.transport ?? []).map((t) => attachTransportLink(t, departDate)),
+    transportRes.legs,
+  );
+
+  const enrichedOptions = (plan.options ?? []).map((opt) => ({
+    ...opt,
+    transport: opt.transport.map((t) => attachTransportLink(t, departDate)),
+    hotels: opt.hotels.map((h) => attachHotelLink(h, departDate, returnDate, adults)),
+    activities: opt.activities.map(attachActivityLink),
+    flights: opt.flights ?? mergedFlights.slice(0, 3),
+    total_price: opt.total_price ?? opt.price,
+  }));
+
+  return {
+    ...plan,
+    start_date: departDate,
+    end_date: returnDate,
+    travelers: adults,
+    flights: mergedFlights,
+    hotels: finalHotels,
+    activities,
+    transport,
+    options: enrichedOptions.length ? enrichedOptions : plan.options,
+    enrichment: {
+      flights: flightRes.source,
+      hotels: hotelRes.source,
+      transport: transportRes.source,
+      reviews: process.env.GOOGLE_PLACES_API_KEY ? "google-places" : "mock",
+    },
+    generated_at: new Date().toISOString(),
+  };
+}
+
+function offsetDate(base: Date, days: number): string {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function attachFlightLink(
+  f: Flight,
+  origin: string,
+  destination: string,
+  depart?: string,
+  ret?: string,
+): Flight {
+  if (f.booking_link) return f;
+  const link = skyscannerFlightLink({
+    origin: f.from || origin,
+    destination: f.to || destination,
+    departDate: depart,
+    returnDate: ret,
+  });
+  return { ...f, ...link };
+}
+
+function attachHotelLink(h: Hotel, checkIn?: string, checkOut?: string, adults?: number): Hotel {
+  if (h.booking_link) return h;
+  const link = bookingHotelLink({
+    hotelName: h.name,
+    city: h.city,
+    checkIn,
+    checkOut,
+    adults,
+  });
+  return { ...h, ...link };
+}
+
+function attachActivityLink(a: Activity): Activity {
+  if (a.booking_link) return a;
+  const link = activityLink(a.name, a.city);
+  return { ...a, ...link };
+}
+
+function attachTransportLink(t: TransportLeg, date?: string): TransportLeg {
+  if (t.booking_link) return t;
+  const link = transportLink(t.mode, t.from, t.to, date);
+  return { ...t, ...link };
+}
+
+function mergeFlights(ai: Flight[], real: Flight[]): Flight[] {
+  const seen = new Set<string>();
+  const out: Flight[] = [];
+  for (const list of [real, ai]) {
+    for (const f of list) {
+      const key = `${f.airline}-${f.from}-${f.to}-${Math.round(f.price / 10) * 10}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(f);
+    }
+  }
+  return out.sort((a, b) => a.price - b.price);
+}
+
+function mergeHotels(ai: Hotel[], real: Hotel[]): Hotel[] {
+  const seen = new Set<string>();
+  const out: Hotel[] = [];
+  for (const list of [real, ai]) {
+    for (const h of list) {
+      const key = h.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(h);
+    }
+  }
+  return out;
+}
+
+function mergeTransport(ai: TransportLeg[], real: TransportLeg[]): TransportLeg[] {
+  const seen = new Set<string>();
+  const out: TransportLeg[] = [];
+  for (const list of [ai, real]) {
+    for (const t of list) {
+      const key = `${t.mode}-${t.from}-${t.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(t);
+    }
+  }
+  return out;
 }
 
 function fallbackPlan(query: string): TripPlan {
   const dest = guessDestination(query);
   const days = guessDays(query) ?? 7;
   const budget = guessBudget(query) ?? 1000;
+  const origin = guessOrigin(query) ?? "Paris";
 
   return {
     destination: dest,
-    origin: "Paris",
+    origin,
     duration_days: days,
+    travelers: 2,
     budget_total: budget,
     currency: "EUR",
-    summary: `Voyage de ${days} jours à ${dest} avec un budget de ${budget}€. (Mode démo — configurez ANTHROPIC_API_KEY pour des plans générés par IA.)`,
+    summary: `Voyage de ${days} jours à ${dest} avec un budget de ${budget}€ depuis ${origin}. (Mode démo — configurez ANTHROPIC_API_KEY pour des plans IA personnalisés.)`,
     options: [
       {
         type: "cheap",
@@ -80,7 +283,7 @@ function fallbackPlan(query: string): TripPlan {
         transport: [
           {
             mode: "flight",
-            from: "Paris",
+            from: origin,
             to: dest,
             duration: "Variable",
             price: Math.round(budget * 0.35),
@@ -91,9 +294,10 @@ function fallbackPlan(query: string): TripPlan {
           {
             name: `Auberge ${dest}`,
             city: dest,
-            nights: days - 1,
+            nights: Math.max(1, days - 1),
             price_per_night: 35,
             rating: 3,
+            tags: ["économique"],
           },
         ],
         activities: [
@@ -107,7 +311,7 @@ function fallbackPlan(query: string): TripPlan {
         transport: [
           {
             mode: "flight",
-            from: "Paris",
+            from: origin,
             to: dest,
             duration: "Variable",
             price: Math.round(budget * 0.4),
@@ -118,9 +322,10 @@ function fallbackPlan(query: string): TripPlan {
           {
             name: `Hôtel central ${dest}`,
             city: dest,
-            nights: days - 1,
+            nights: Math.max(1, days - 1),
             price_per_night: 80,
             rating: 4,
+            tags: ["confortable"],
           },
         ],
         activities: [
@@ -135,7 +340,7 @@ function fallbackPlan(query: string): TripPlan {
         transport: [
           {
             mode: "flight",
-            from: "Paris",
+            from: origin,
             to: dest,
             duration: "Variable",
             price: Math.round(budget * 0.6),
@@ -146,9 +351,10 @@ function fallbackPlan(query: string): TripPlan {
           {
             name: `Resort 5★ ${dest}`,
             city: dest,
-            nights: days - 1,
+            nights: Math.max(1, days - 1),
             price_per_night: 220,
             rating: 5,
+            tags: ["luxe", "spa"],
           },
         ],
         activities: [
@@ -166,11 +372,7 @@ function fallbackPlan(query: string): TripPlan {
           title: i === 0 ? "Arrivée et installation" : "Petit-déjeuner local",
           location: dest,
         },
-        {
-          time: "11:00",
-          title: i === 0 ? "Première promenade" : "Visite culturelle",
-          location: dest,
-        },
+        { time: "11:00", title: i === 0 ? "Première promenade" : "Visite culturelle", location: dest },
         { time: "13:00", title: "Déjeuner", location: dest },
         { time: "15:00", title: "Activité de l'après-midi", location: dest },
         { time: "19:30", title: "Dîner et soirée", location: dest },
@@ -193,34 +395,20 @@ function fallbackPlan(query: string): TripPlan {
 
 function guessDestination(q: string): string {
   const known = [
-    "Japon",
-    "Japan",
-    "Tokyo",
-    "Italie",
-    "Italy",
-    "Rome",
-    "Espagne",
-    "Spain",
-    "Barcelone",
-    "Thaïlande",
-    "Thailand",
-    "Bangkok",
-    "Bali",
-    "New York",
-    "Lisbonne",
-    "Lisbon",
-    "Marrakech",
-    "Maroc",
-    "Grèce",
-    "Greece",
-    "Athènes",
-    "Islande",
-    "Iceland",
+    "Japon", "Japan", "Tokyo", "Italie", "Italy", "Rome", "Espagne", "Spain",
+    "Barcelone", "Thaïlande", "Thailand", "Bangkok", "Bali", "New York",
+    "Lisbonne", "Lisbon", "Marrakech", "Maroc", "Grèce", "Greece", "Athènes",
+    "Islande", "Iceland",
   ];
   for (const k of known) {
     if (new RegExp(k, "i").test(q)) return k;
   }
   return "Destination";
+}
+
+function guessOrigin(q: string): string | null {
+  const m = q.match(/depuis\s+([A-ZÀ-Ÿ][a-zà-ÿ-]+)/i);
+  return m ? m[1] : null;
 }
 
 function guessDays(q: string): number | null {
