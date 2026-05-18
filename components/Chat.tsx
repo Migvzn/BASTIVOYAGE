@@ -10,8 +10,13 @@ const SUGGESTIONS = [
   "Backpacking en Thaïlande 3 semaines, 1500€ depuis Marseille",
 ];
 
+interface Extras {
+  airbnb_search_link?: string;
+  sources?: Record<string, string>;
+}
+
 interface Props {
-  onPlan: (plan: TripPlan, prompt: string) => void;
+  onPlan: (plan: TripPlan, prompt: string, extras?: Extras) => void;
 }
 
 export default function Chat({ onPlan }: Props) {
@@ -33,7 +38,10 @@ export default function Chat({ onPlan }: Props) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data.plan) throw new Error("Réponse invalide");
-      onPlan(data.plan as TripPlan, q);
+      onPlan(data.plan as TripPlan, q, {
+        airbnb_search_link: data.airbnb_search_link,
+        sources: data.sources,
+      });
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Erreur lors de la génération",

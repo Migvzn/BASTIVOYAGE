@@ -9,14 +9,20 @@ const STORAGE_KEY = "bastivoyage:lastPlan";
 
 export default function TripPage() {
   const [plan, setPlan] = useState<TripPlan | null>(null);
+  const [airbnb, setAirbnb] = useState<string | undefined>();
+  const [sources, setSources] = useState<Record<string, string> | undefined>();
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { plan: TripPlan };
-        if (parsed?.plan) setPlan(parsed.plan);
+        const parsed = JSON.parse(raw);
+        if (parsed?.plan) {
+          setPlan(parsed.plan as TripPlan);
+          setAirbnb(parsed.airbnb_search_link);
+          setSources(parsed.sources);
+        }
       }
     } catch {
       // ignore
@@ -48,7 +54,12 @@ export default function TripPage() {
         {!loaded ? (
           <div className="text-center text-stone-500">Chargement...</div>
         ) : plan ? (
-          <TripView plan={plan} />
+          <TripView
+            plan={plan}
+            airbnbSearchLink={airbnb}
+            flightsSource={sources?.flights}
+            hotelsSource={sources?.hotels}
+          />
         ) : (
           <div className="text-center py-20">
             <p className="text-stone-600 dark:text-stone-300 mb-4">
