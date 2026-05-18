@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Chat from "@/components/Chat";
 import TripView from "@/components/TripView";
+import SaveTripButton from "@/components/SaveTripButton";
 import type { TripPlan } from "@/lib/types";
 
 const STORAGE_KEY = "bastivoyage:lastPlan";
@@ -92,13 +93,31 @@ export default function Home() {
             <span className="text-2xl">✈️</span>
             BastiVoyage
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Link
+              href="/deals"
+              className="text-sm px-3 py-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition"
+            >
+              Deals
+            </Link>
+            <Link
+              href="/account"
+              className="text-sm px-3 py-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition"
+            >
+              Mes voyages
+            </Link>
+            <Link
+              href="/premium"
+              className="text-sm px-3 py-1.5 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-semibold transition"
+            >
+              ✨ Premium
+            </Link>
             {plan && (
               <button
                 onClick={reset}
                 className="text-sm px-3 py-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition"
               >
-                Nouveau voyage
+                Nouveau
               </button>
             )}
             <button
@@ -134,7 +153,12 @@ export default function Home() {
           id="trip-result"
           className="max-w-6xl mx-auto px-4 sm:px-6 pb-20"
         >
-          <div className="flex justify-end mb-4">
+          <div className="flex flex-wrap justify-end gap-2 mb-4">
+            <SaveTripButton
+              plan={plan}
+              airbnbSearchLink={extras.airbnb_search_link}
+              sources={extras.sources}
+            />
             <Link
               href="/results"
               className="text-sm px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition"
