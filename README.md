@@ -18,6 +18,9 @@
 | **📍 Carte** | OpenStreetMap embed · lien Google Maps |
 | **🗓 Itinéraire** | Jour par jour cohérent (géographie, horaires) |
 | **🔗 Booking** | Chaque résultat = `booking_link` + `affiliate_url` (si configuré) + `fallback_link` Google |
+| **🔥 Deals SEO** | Pages statiques `/deals/[slug]` rafraîchies via Vercel Cron toutes les 6h |
+| **👤 Comptes** | Auth Supabase email/mot de passe + sauvegarde des voyages |
+| **💎 Premium** | Stripe Checkout one-shot pour débloquer export PDF + concierge IA |
 
 **Philosophie** : l'app fonctionne **sans aucune clé API** grâce à des données mock réalistes générées par Claude. Chaque clé ajoutée enrichit progressivement les résultats avec du temps réel.
 
@@ -128,6 +131,35 @@ Le framework est auto-détecté (Next.js 14, App Router, runtime nodejs).
 
 `prompts/travel.md` est inclus dans le bundle serverless via `experimental.outputFileTracingIncludes` dans `next.config.js`.
 
+Le `vercel.json` configure un **cron toutes les 6 heures** qui rafraîchit le cache ISR des pages deals (`/api/cron/deals`). Optionnel : définissez `CRON_SECRET` pour authentifier l'endpoint.
+
+---
+
+## 🗄 Supabase setup (auth + voyages sauvegardés)
+
+1. Créez un projet sur [supabase.com](https://supabase.com/dashboard)
+2. Dans **SQL Editor**, exécutez le contenu de [`supabase/schema.sql`](./supabase/schema.sql) (crée la table `trips` avec RLS par user)
+3. Récupérez dans **Settings → API** :
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` → `SUPABASE_SERVICE_ROLE_KEY` (optionnel, server-only)
+4. Dans **Authentication → Providers**, activez **Email** (et désactivez "Confirm email" pour les tests rapides)
+
+Sans Supabase, l'app fonctionne mais `/login`, `/account` et le bouton "Sauvegarder" répondent 503.
+
+---
+
+## 💳 Stripe setup (premium)
+
+1. [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys) → mode Test
+2. Créez un produit **"BastiVoyage Premium"** → prix one-time 9,99 €
+3. Copiez :
+   - `Secret key` → `STRIPE_SECRET_KEY`
+   - `Price ID` du produit → `STRIPE_PREMIUM_PRICE_ID`
+4. Webhook : créez un endpoint vers `https://votre-domaine.vercel.app/api/stripe/webhook` avec l'event `checkout.session.completed`. Copiez le **signing secret** → `STRIPE_WEBHOOK_SECRET`
+
+Sans Stripe, la page `/premium` affiche le pricing mais le bouton renvoie 503.
+
 ---
 
 ## 💰 Monétisation
@@ -157,11 +189,12 @@ Pour des conversions optimales :
 
 ## 📝 Roadmap
 
-- [ ] Webhook Stripe pour upsell "voyage premium"
-- [ ] Cron job Vercel pour deals de dernière minute → pages SEO auto-générées
+- [x] Webhook Stripe pour upsell "voyage premium"
+- [x] Cron job Vercel pour deals de dernière minute → pages SEO auto-générées
+- [x] Auth Supabase + sauvegarde cloud des voyages
 - [ ] Mode multi-destination (city-hopping intelligent)
-- [ ] Export PDF de l'itinéraire
-- [ ] Auth Supabase + sauvegarde cloud des voyages
+- [ ] Export PDF de l'itinéraire (avec @react-pdf/renderer)
+- [ ] Alertes prix par email
 - [ ] Mode hors-ligne (PWA)
 
 ---
